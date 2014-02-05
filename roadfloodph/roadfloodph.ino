@@ -77,7 +77,7 @@ void setup() {
   /////////sms sending setup///////////
   initGSM();
   send_msg("21583567", "TEST 9275628107");
-}
+}  //end of function setup
 
 void loop() {
   
@@ -136,6 +136,7 @@ void loop() {
    ////send new update to server
    sendNewFloodUpdate();
   }
+  
   Serial.println();
   Serial.print("abruptChangeTimer: ");
   Serial.println(abruptChangeTimer);
@@ -143,6 +144,7 @@ void loop() {
   
   delay(1000);
   
+  ///////determination of distance using ping///////////
   unsigned int uS = sonar.ping(); // Send ping, get ping time in microseconds (uS).
   int distance = abs((uS / US_ROUNDTRIP_CM)/2.54);  //get distance in terms of inches
   waterFloodLevel = floodHeightReference - distance;
@@ -178,7 +180,7 @@ void loop() {
     abruptChangeTimer = 0;
   }
   //#####end of Ultrasonic Looping codes ###//
-}
+}  //end of function loop
 
 void send_msg(char *number, char *msgToSend)
 {
@@ -195,18 +197,18 @@ void send_msg(char *number, char *msgToSend)
   delay(100);
   sendGSM(msg1);
   delay(100);
-}
+}  //end of function send_msg
 
 void sendGSM(char *string){
   mySerial.write(string);
   delay(90);
-}
+}  //end of function sendGSM
 
 void clearString(char *strArray) {
   int j;
   for (j = 100; j > 0; j--)
     strArray[j] = 0x00;
-}
+}  //end of function clearString
 
 void send_cmd(char *at_cmd, char clr){
   char *stat = '\0';
@@ -222,7 +224,7 @@ void send_cmd(char *at_cmd, char clr){
     delay(200);
     stat = '\0';
   }
-}
+}  //end of function send_cmd
 
 void initGSM(){
   
@@ -237,7 +239,7 @@ void initGSM(){
   delay(1000);
   delay(1000);
   delay(1000);
-}
+}  //end of function initGSM
 
 void readSerialString (char *strArray) {
   
@@ -250,38 +252,31 @@ void readSerialString (char *strArray) {
     strArray[serialIndex] = mySerial.read();
     serialIndex++;
   }
-}
+}  //end of function readSerialString
 
 /////////////////receive SMS///////////////////
 void readSMS(){
   if(mySerial.available() > 0){
    Serial.println("read");
     while(mySerial.available() > 0){
-      
       c = mySerial.read();
       Serial.print(c);
       if(c=='O'){
-        
         c = mySerial.read();
         Serial.print(c);
         if(c=='K'){
-        
           c = mySerial.read();
           Serial.print(c);
           isStart++; 
-          
           if(isStart==3){
             isStart = 0;
             Serial.println("SMS is READY");
             isSmsReady = true;
             delay(500);
-            
           }        
         }       
       }
-      
-      else if(c=='+'){
-        
+      else if(c=='+'){ 
         c = mySerial.read();
         Serial.print(c);
         if(c == 'C'){
@@ -295,18 +290,15 @@ void readSMS(){
               Serial.print(c);
               if(c == 'I'){
                 for(int i = 0; i < 8; i++){
-                
                   c = mySerial.read();
                   Serial.print(c);
                   delay(10);
-                  
                 }
               }
               Serial.println();
               mySerial.print("AT+CMGR=");
               mySerial.println(c);
               if(mySerial.available() > 0){
-                
                 c = mySerial.read();
                 Serial.print(c);
                 while(c != '+'){
@@ -323,45 +315,35 @@ void readSMS(){
                     c = mySerial.read();
                     Serial.print(c);
                     delay(10);
-                    
                     if(c == 'G'){
-                     
                       c = mySerial.read();
                       Serial.print(c);
                       delay(10);
                       if(c == 'R'){
-                      while(c != ','){
-                        c = mySerial.read();
+                        while(c != ','){
+                          c = mySerial.read();
+                          Serial.print(c);
+                        }
                         Serial.print(c);
-                      }
-                      Serial.print(c);
-                      delay(10);
-                      for(int readNumber = 0; readNumber<14; readNumber++){
-                        c = mySerial.read();
-                        Serial.print(c);
-                        
-                        senderNumber[readNumber] = c;
-                      
-                      }
-                      
-                    checkCommand();
-                      
+                        delay(10);
+                        for(int readNumber = 0; readNumber<14; readNumber++){
+                          c = mySerial.read();
+                          Serial.print(c);
+                          senderNumber[readNumber] = c;
+                        }
+                        checkCommand();
                       }
                     }
                   }
                 }
               }    // end of AT+CMGR  
-
             }           
           }
         }      
       }         // end of +CMTI  
-      
     } // end of while
   } // end of if mySerial
-  
-  
-}   
+}  //end of function readSMS
 
 
 void checkCommand(){
@@ -370,6 +352,7 @@ void checkCommand(){
     c = mySerial.read();
     Serial.print(c);
   }
+  
   int cnt = 0;
   while(mySerial.available() > 0){
   
@@ -382,13 +365,10 @@ void checkCommand(){
   messageRecieve = msg;
   messageRecieve.trim();
   messageRecieve.toUpperCase();  
- 
   Serial.println("length is: ");
   Serial.println(messageRecieve.length());
   
-
   delay(1000);
-
   Serial.println();
   Serial.print("Messsage: ");
   Serial.print(messageRecieve);
@@ -423,31 +403,29 @@ void checkCommand(){
     delSMS();
     }
   }
-}
-
+}  //end of function checkCommand
 
 void delSMS(){
   mySerial.println("AT+CMGD=1,4");
   delay(200);
-}
+}  //end of function delSMS
 
 
 //##########functions for ultrasonic##########//
 //Function to print the arrays.
 void printArray(int *a, int n) {
-
   for (int i = 0; i < n; i++)
   {
     Serial.print(a[i], DEC);
     Serial.print(' ');
   }
-
   Serial.println();
+}  //end of function printArray
 
-}
 
 //Sorting function
 // sort function (Author: Bill Gentles, Nov. 12, 2010)
+
 void isort(int *a, int n){
 // *a is an array pointer function
 
@@ -461,12 +439,10 @@ void isort(int *a, int n){
     }
     a[k + 1] = j;
   }
-
-}
+}  //end of function isort
 
 //Mode function, returning the mode or median.
 int getMode(int *x,int n){
-
   int i = 0;
   int count = 0;
   int maxCount = 0;
@@ -475,16 +451,12 @@ int getMode(int *x,int n){
   int prevCount = 0;
 
   while(i<(n-1)){
-
     prevCount=count;
     count=0;
-
     while(x[i]==x[i+1]){
-
       count++;
       i++;
     }
-
     if(count>prevCount&count>maxCount){
       mode=x[i];
       maxCount=count;
@@ -501,8 +473,7 @@ int getMode(int *x,int n){
     }
     return mode;
   }
-
-}
+}  //end of function mode
 
 void sendNewFloodUpdate(){
   String smsUpdate = "FLUPDATE " ;
@@ -510,4 +481,4 @@ void sendNewFloodUpdate(){
    char charSmsMessage[130];
    smsUpdate.toCharArray(charSmsMessage, 130);
    send_msg("21583567", charSmsMessage);
-}
+}  //end of function sendNewFloodUpdate
