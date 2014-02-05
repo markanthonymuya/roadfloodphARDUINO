@@ -1,25 +1,28 @@
 #define powerOn 13
 #define referenceLightIndicator 7
 
-//##########GSM Variables#############//
+//##########GSM VARIABLES#############//
 #include <SoftwareSerial.h>
 #define rxPin 2  //Gizduino pin tied to RX pin of the GSM/GPRS module.
 #define txPin 3  //Gizduino pin tied to TX pin of the GSM/GPRS module.
 SoftwareSerial mySerial(rxPin,txPin);
-/////////////receiving variables////////
+
+/////////sms receiving variables////////
 String messageRecieve;  //Message Received from API
 char msgToSend[30]="";
 char c = 0;
 char senderNumber[14];
 byte isStart = 0;
 boolean isSmsReady = false;
+int serialIndex = 0;
+String globeAPINumber = "21583567";
 
-/////////////sending variables///////////
+/////////sms sending variables///////////
 char Rx_data[50];
 unsigned char Rx_index = 0;
 char msg[160];  //message to send
 
-//#########Ultrasonic Variables#########//
+//#########ULTRASONIC VARIABLES#########//
 #include <NewPing.h>
 #define TRIGGER_PIN  5  // Gizduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     4  // Gizduino pin tied to echo pin on the ultrasonic sensor.
@@ -38,15 +41,18 @@ int abruptChangeTimer = 0;  //determiner of 1 minute abrupt change in water leve
 boolean firstModeDetermination = true;
 int unitHeight = 2.19; //in meters
 int floodHeightReference = 0;  //maximum height of unit in inches during installation process, flood free.
+int waterFloodLevel = 0;
 
 
 void setup() {
   //floodheight reference calculation
   floodHeightReference = abs((unitHeight*100)/2.54);
   
-  ////////////receive setup ////////////
+  /////////general serial setup//////////
   Serial.begin(9600);
   mySerial.begin(9600);
+  
+  /////////sms receiving setup///////////
   pinMode(powerOn,OUTPUT);  //pin 13 arduino
   pinMode(referenceLightIndicator, OUTPUT);  //pin 7 arduino
 
@@ -55,31 +61,32 @@ void setup() {
   digitalWrite(powerOn,LOW);
   delay(5000);
 
- Serial.println("executing AT+CMGF=1");
+  Serial.println("executing AT+CMGF=1");
   mySerial.println("AT+CMGF=1"); // set sms mode to text  Human Read able Text Format.
   delay(200);
   Serial.println("executing AT+CLIP=1");
   mySerial.println("AT+CLIP=1"); // set sms mode to text
   delay(200);
- Serial.println("executing AT+CNMI=2,1,0,0");  
+  Serial.println("executing AT+CNMI=2,1,0,0");  
   mySerial.println("AT+CNMI=2,1,0,0"); // sms received noti
   delay(200);
- Serial.println("executing AT+CMGD=1,4");  
+  Serial.println("executing AT+CMGD=1,4");  
   mySerial.println("AT+CMGD=1,4"); // delete all SMS
   delay(200);
   
-  ///////////sending SMS/////////
-  
+  /////////sms sending setup///////////
   initGSM();
   send_msg("21583567", "TEST 9275628107");
 }
 
 void loop() {
-  readSMS();
   
+  //######function code to read received sms######///
+  readSMS();
+  //##end of function code to read received sms###///
   
   //########start of ultrasonic looping codes######//  
-  if(index == 9){
+  if(index == 9){  //if it reach the last index of the sampling array
     index = 0;
     isort(distanceSamples, arraysize);
     printArray(distanceSamples, arraysize);
@@ -92,23 +99,14 @@ void loop() {
       maxExpectedValue = mode + smsFrequency;
       reportedFloodLevel = mode;
       //send new update to server
-      String smsUpdate = "FLUPDATE " ;
-      smsUpdate.concat(reportedFloodLevel);
-      char charSmsMessage[130];
-      smsUpdate.toCharArray(charSmsMessage, 130);
-      send_msg("21583567", charSmsMessage);
+      sendNewFloodUpdate();
     }
     else{      
       if(mode == minExpectedValue || mode == maxExpectedValue){
         minExpectedValue = mode - smsFrequency;
         maxExpectedValue = mode + smsFrequency;
         //send new update to server
-        reportedFloodLevel = mode;
-        String smsUpdate = "FLUPDATE " ;
-        smsUpdate.concat(reportedFloodLevel);
-        char charSmsMessage[130];
-        smsUpdate.toCharArray(charSmsMessage, 130);
-        send_msg("21583567", charSmsMessage);
+        sendNewFloodUpdate();
       }
     }
     
@@ -131,17 +129,12 @@ void loop() {
   }
   
   if(abruptChangeTimer == 65){
-   abruptChangeTimer = 0;
    reportedFloodLevel = mode;      //assigns new mode based on abrupt change in 65 sec
    minExpectedValue = mode - smsFrequency;
    maxExpectedValue = mode + smsFrequency;
    reportedFloodLevel = mode;
-   //send new update to server
-   String smsUpdate = "FLUPDATE " ;
-   smsUpdate.concat(reportedFloodLevel);
-   char charSmsMessage[130];
-   smsUpdate.toCharArray(charSmsMessage, 130);
-   send_msg("21583567", charSmsMessage);
+   ////send new update to server
+   sendNewFloodUpdate();
   }
   Serial.println();
   Serial.print("abruptChangeTimer: ");
@@ -152,9 +145,17 @@ void loop() {
   
   unsigned int uS = sonar.ping(); // Send ping, get ping time in microseconds (uS).
   int distance = abs((uS / US_ROUNDTRIP_CM)/2.54);  //get distance in terms of inches
-  distanceSamples[index] = floodHeightReference - distance;
+  waterFloodLevel = floodHeightReference - distance;
+  distanceSamples[index] = waterFloodLevel;
   index = index + 1;
   
+  //lights up the unit positioning indicator
+  Serial.println();
+  Serial.println("Flood Height Reference: ");
+  Serial.print(floodHeightReference);
+  Serial.println("Distance: ");
+  Serial.print(distance);
+  Serial.println();
   if(distance == floodHeightReference){
     digitalWrite(referenceLightIndicator,HIGH);  
   }
@@ -167,10 +168,10 @@ void loop() {
   Serial.print(distance); // Convert ping time to distance in cm and print result (0 = outside set distance range)
   Serial.println("inches");
   
-  if(distance < minExpectedValue){
+  if(waterFloodLevel < minExpectedValue){
     abruptChangeTimer = abruptChangeTimer + 1;
   }
-  else if(distance > maxExpectedValue){
+  else if(waterFloodLevel > maxExpectedValue){
     abruptChangeTimer = abruptChangeTimer + 1;
   }
   else{
@@ -246,8 +247,8 @@ void readSerialString (char *strArray) {
   }
   
   while(mySerial.available()) {
-    strArray[i] = mySerial.read();
-    i++;
+    strArray[serialIndex] = mySerial.read();
+    serialIndex++;
   }
 }
 
@@ -395,33 +396,32 @@ void checkCommand(){
   Serial.println(senderNumber);
   delay(100);
   
-  if(messageRecieve.equals("RESEND")){
-    Serial.println("Sending Status");
-    //send new update to server
-    String smsUpdate = "FLUPDATE " ;
-    smsUpdate.concat(reportedFloodLevel);
-    char charSmsMessage[130];
-    smsUpdate.toCharArray(charSmsMessage, 130);
-    send_msg("21583567", charSmsMessage);
-  }
-  else if(messageRecieve.equals("START")){
-    digitalWrite(powerOn,HIGH); 
-    delay(4000);
-    digitalWrite(powerOn,LOW);
-    delay(5000);
-    send_msg("21583567", "STARTED");
-  }
-  else if(messageRecieve.equals("SHUTDOWN")){
-    digitalWrite(powerOn,HIGH); 
-    delay(4000);
-    digitalWrite(powerOn,LOW);
-    delay(5000);
-    send_msg("21583567", "SHUTDOWN");
-  }
-  else{
-  Serial.println("Invalid Keyword");
-  delay(10);
-  delSMS();
+  String senderNumberString = String(senderNumber);
+  if(senderNumberString.equals(globeAPINumber)){
+    if(messageRecieve.equals("RESEND")){
+      Serial.println("Sending Status");
+      //send new update to server
+      sendNewFloodUpdate();
+    }
+    else if(messageRecieve.equals("START")){
+      digitalWrite(powerOn,HIGH); 
+      delay(4000);
+      digitalWrite(powerOn,LOW);
+      delay(5000);
+      send_msg("21583567", "STARTED");
+    }
+    else if(messageRecieve.equals("SHUTDOWN")){
+      digitalWrite(powerOn,HIGH); 
+      delay(4000);
+      digitalWrite(powerOn,LOW);
+      delay(5000);
+      send_msg("21583567", "SHUTDOWN");
+    }
+    else{
+    Serial.println("Invalid Keyword");
+    delay(10);
+    delSMS();
+    }
   }
 }
 
@@ -502,4 +502,12 @@ int getMode(int *x,int n){
     return mode;
   }
 
-} 
+}
+
+void sendNewFloodUpdate(){
+  String smsUpdate = "FLUPDATE " ;
+   smsUpdate.concat(reportedFloodLevel);
+   char charSmsMessage[130];
+   smsUpdate.toCharArray(charSmsMessage, 130);
+   send_msg("21583567", charSmsMessage);
+}
