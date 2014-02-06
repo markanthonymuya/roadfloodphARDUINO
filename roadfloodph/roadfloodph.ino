@@ -8,8 +8,8 @@
 SoftwareSerial mySerial(rxPin,txPin);
 
 /////////sms receiving variables////////
-String messageRecieve;  //Message Received from API
-char msgToSend[30]="";
+String mess;
+char msg[30]="";
 char c = 0;
 char senderNumber[14];
 byte isStart = 0;
@@ -20,7 +20,8 @@ String globeAPINumber = "21583567";
 /////////sms sending variables///////////
 char Rx_data[50];
 unsigned char Rx_index = 0;
-char msg[160];  //message to send
+char msgToSend[160];  //message to send
+boolean smsSendingSwitch = true;
 
 //#########ULTRASONIC VARIABLES#########//
 #include <NewPing.h>
@@ -100,18 +101,23 @@ void loop() {
       reportedFloodLevel = mode;
       //send new update to server
       sendNewFloodUpdate();
-    }
-    else{      
-      if(mode == minExpectedValue || mode == maxExpectedValue){
-        minExpectedValue = mode - smsFrequency;
-        maxExpectedValue = mode + smsFrequency;
-        //send new update to server
-        sendNewFloodUpdate();
-      }
-    }
+    }    
     
     if(minExpectedValue < 0){
       minExpectedValue = 0;
+    }
+    
+    if(mode == minExpectedValue){
+      minExpectedValue = mode - smsFrequency;
+      maxExpectedValue = mode + smsFrequency;
+      //send new update to server
+      sendNewFloodUpdate();
+    }
+    else if(mode == maxExpectedValue){
+      minExpectedValue = mode - smsFrequency;
+      maxExpectedValue = mode + smsFrequency;
+      //send new update to server
+      sendNewFloodUpdate();
     }
     
     Serial.print("min: ");
@@ -123,7 +129,7 @@ void loop() {
     Serial.print("Reported Flood Level: ");
     Serial.print(reportedFloodLevel);
     Serial.println();
-    Serial.print("The mode/median is: ");
+    Serial.print("..................................The mode/median is: ");
     Serial.print(mode);
     Serial.println();
   }
@@ -153,9 +159,10 @@ void loop() {
   
   //lights up the unit positioning indicator
   Serial.println();
-  Serial.println("Flood Height Reference: ");
+  Serial.print("Flood Height Reference: ");
   Serial.print(floodHeightReference);
-  Serial.println("Distance: ");
+  Serial.println();
+  Serial.print("Distance: ");
   Serial.print(distance);
   Serial.println();
   if(distance == floodHeightReference){
@@ -328,6 +335,7 @@ void readSMS(){
                         delay(10);
                         for(int readNumber = 0; readNumber<14; readNumber++){
                           c = mySerial.read();
+                          Serial.print(".........................................................");
                           Serial.print(c);
                           senderNumber[readNumber] = c;
                         }
@@ -347,62 +355,69 @@ void readSMS(){
 
 
 void checkCommand(){
-
   while(c != '\r'){
     c = mySerial.read();
     Serial.print(c);
   }
-  
   int cnt = 0;
   while(mySerial.available() > 0){
   
     c = mySerial.read();
     Serial.print(c); 
-    msg[cnt] = c;
+    msgToSend[cnt] = c;
     cnt++;
   }
   
-  messageRecieve = msg;
-  messageRecieve.trim();
-  messageRecieve.toUpperCase();  
+  mess = msgToSend;
+  mess.trim();
+  mess.toUpperCase();  
+ 
   Serial.println("length is: ");
-  Serial.println(messageRecieve.length());
+  Serial.println(mess.length());
   
+
   delay(1000);
+
   Serial.println();
   Serial.print("Messsage: ");
-  Serial.print(messageRecieve);
+  Serial.print(mess);
   Serial.println("From");
   Serial.println(senderNumber);
   delay(100);
+
   
-  String senderNumberString = String(senderNumber);
-  if(senderNumberString.equals(globeAPINumber)){
-    if(messageRecieve.equals("RESEND")){
-      Serial.println("Sending Status");
+    if(mess.equals("RESEND")){
+      Serial.println("RESENDING..................................");
       //send new update to server
       sendNewFloodUpdate();
     }
-    else if(messageRecieve.equals("START")){
-      digitalWrite(powerOn,HIGH); 
-      delay(4000);
-      digitalWrite(powerOn,LOW);
-      delay(5000);
+    else if(mess.equals("START")){
+      smsSendingSwitch = true;
       send_msg("21583567", "STARTED");
+      Serial.print("Started.....................................");
     }
-    else if(messageRecieve.equals("SHUTDOWN")){
-      digitalWrite(powerOn,HIGH); 
-      delay(4000);
-      digitalWrite(powerOn,LOW);
-      delay(5000);
+    else if(mess.equals("SHUTDOWN")){
+      smsSendingSwitch = false;
       send_msg("21583567", "SHUTDOWN");
+      Serial.print("Shutdown....................................");
+    }
+    else if(mess.equals("VWUPDATE")){
+      char charSmsMessage[130];
+      String smsUpdate = "VWUPDATE " ;
+      if(reportedFloodLevel < 0){
+        //sometimes it happens when the ultrasonic losses its stable supply
+        reportedFloodLevel = 0;
+      }
+      smsUpdate.concat(reportedFloodLevel);
+      smsUpdate.toCharArray(charSmsMessage, 130);
+      send_msg("21583567", charSmsMessage);
     }
     else{
-    Serial.println("Invalid Keyword");
-    delay(10);
-    delSMS();
+      Serial.print(".............................................INVALID Keyword");
+      delay(10);
+      delSMS();
     }
-  }
+
 }  //end of function checkCommand
 
 void delSMS(){
@@ -476,9 +491,17 @@ int getMode(int *x,int n){
 }  //end of function mode
 
 void sendNewFloodUpdate(){
-  String smsUpdate = "FLUPDATE " ;
-   smsUpdate.concat(reportedFloodLevel);
-   char charSmsMessage[130];
-   smsUpdate.toCharArray(charSmsMessage, 130);
-   send_msg("21583567", charSmsMessage);
+//  if(smsSendingSwitch){
+    String smsUpdate = "FLUPDATE " ;
+    Serial.println("FLUPDATE............................SENDING NEW UPDATE.....");
+    if(reportedFloodLevel < 0){
+      //sometimes it happens when the ultrasonic losses its stable supply
+      reportedFloodLevel = 0;
+    }
+    smsUpdate.concat(reportedFloodLevel);
+    char charSmsMessage[130];
+    smsUpdate.toCharArray(charSmsMessage, 130);
+    send_msg("21583567", charSmsMessage);
+    memset(charSmsMessage, 0, 130);
+//  }
 }  //end of function sendNewFloodUpdate
